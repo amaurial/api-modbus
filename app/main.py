@@ -1,44 +1,34 @@
 from fastapi import FastAPI, HTTPException
-from starlette.responses import Response
+from app.db.models import MemoryInfo
+from app.api.memory_test import process_memory_test_result
+from pyModbusTCP.client import ModbusClient
 
-from app.db.models import UserAnswer
-from app.api import api
+
+def connect_modbus(host, port):
+    try:
+        modbus_client = ModbusClient(host, port, unit_id=255, auto_open=True)
+        modbus_client.open()
+        print("Connected to CLP")
+        return modbus_client
+    except Exception as e:
+        raise e
+
 
 app = FastAPI()
 
+MODBUS_IP = "192.168.0.5"
+MODBUS_PORT = 502
+modbus = connect_modbus(host=MODBUS_IP, port=MODBUS_PORT)
 
 @app.get("/")
 def root():
-    return {"message": "Fast API in Python"}
+    return {"message": "Memory check api"}
 
+@app.post("/test_result", status_code=201)
+def test_result(payload: MemoryInfo):
+    print(payload)
+    result, error = process_memory_test_result(payload, modbus)
+    if not result:
+        raise HTTPException(status_code=400, detail=error)
+    return result
 
-@app.get("/user")
-def read_user():
-    return api.read_user()
-
-
-@app.get("/question/{position}", status_code=200)
-def read_questions(position: int, response: Response):
-    question = api.read_questions(position)
-
-    if not question:
-        raise HTTPException(status_code=400, detail="Error")
-
-    return question
-
-
-@app.get("/alternatives/{question_id}")
-def read_alternatives(question_id: int):
-    return api.read_alternatives(question_id)
-
-
-@app.post("/answer", status_code=201)
-def create_answer(payload: UserAnswer):
-    payload = payload.dict()
-
-    return api.create_answer(payload)
-
-
-@app.get("/result/{user_id}")
-def read_result(user_id: int):
-    return api.read_result(user_id)
